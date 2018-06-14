@@ -1,0 +1,12 @@
+---
+mesos_rpm: "http://repos.mesosphere.io/el/7/noarch/RPMS/mesosphere-el-repo-7-1.noarch.rpm" 
+mesos_master:
+ - 10.193.112.199
+ - 10.193.112.175
+ - 10.193.112.200
+cluster_name: "openLab-cluster"
+quorum: zk://10.193.112.199:2181,10.193.112.175:2181,10.193.112.200:2181/mesos 
+data_dir: /disk1/mesos
+spark_nfs_location: /willows/qa/asup/spark_binaries
+spark_binary_location: /opt
+spark_host: 10.193.112.199

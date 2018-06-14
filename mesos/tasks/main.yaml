@@ -1,0 +1,67 @@
+---
+- name: "Download and install mesos repo"
+  yum:
+   name: "{{mesos_rpm}}"
+   state: present
+
+- name: "Install mesos"
+  yum:
+   name: "mesos"
+   state: present
+
+
+- name: "create data dir"
+  file:
+    path: "{{item}}"
+    state: directory
+    owner: "root"
+    group: "root"
+  with_items:
+    - "{{data_dir}}"
+
+
+#- name: "create data links"
+#  file:
+#    src: "{{item}}"
+#    dest: /var/lib/mesos
+#    state: link
+#    owner: "root"
+#    group: "root"
+#  with_items:
+#    - "{{data_dir}}"
+
+
+
+
+- name: "create cluster file"
+  copy:
+   content: "{{ cluster_name }}"
+   dest: /etc/mesos-master/cluster
+   mode: 0755
+  when: inventory_hostname in mesos_master
+
+- name: "create quorum for mesos-master"
+  copy:
+   content: "{{ quorum }}"
+   dest: /etc/mesos/zk
+   mode: 0755
+#  when: inventory_hostname in mesos_master
+
+
+- name: "Start mesos-master"
+  service:
+   name: mesos-master
+   state: restarted
+  when: inventory_hostname in mesos_master
+
+- name: "Start mesos-slave"
+  service:
+   name: mesos-slave
+   state: restarted
+#  when: inventory_hostname not in mesos_master
+
+- name: incluse mesos
+  import_tasks: spark.yaml
+  when: inventory_hostname == spark_host
+  tags:
+   - install_spark

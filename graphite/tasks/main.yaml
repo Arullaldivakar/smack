@@ -1,0 +1,73 @@
+---
+- name: "Install RHEL epel release"
+  yum:
+   name: http://epel.mirror.constant.com/7/x86_64/Packages/e/epel-release-7-11.noarch.rpm
+   state: present
+
+- name: "install graphite,httpd & carbon"
+  yum:
+   name: "{{item}}"
+   state: present
+  with_items:
+   - graphite-web
+   - python-carbon
+   - httpd
+
+- name: "configure storage-schemas"
+  blockinfile:
+   path: /etc/carbon/storage-schemas.conf
+   block: |
+     [default]
+     pattern = .*
+     retentions = 12s:4h, 2m:3d, 5m:8d, 13m:32d, 1h:1y
+   backup: yes
+
+- name: "enable carbon-cache"
+  systemd:
+   name: carbon-cache
+   enabled: yes
+   state: started
+
+- name: " configure graphite database"
+  shell: |
+    set timeout 300
+    PYTHONPATH=/usr/share/graphite/webapp django-admin syncdb --settings=graphite.settings
+    expect "\(yes\/no\)"
+    send "yes\n"
+    expect "\nUsername"
+    send "root\n"
+    expect "Email address:"
+    send "\n"
+    expect "Password:"
+    send "root123\n"
+    expect "Password \(again\):"
+    send "root123\n"
+    exit 0
+  executables:
+   args: /bin/bash
+
+- name: "copy graphite-web.conf"
+  copy:
+   src: graphite-web.conf
+   dest: /etc/httpd/conf.d/graphite-web.conf
+   owner: root
+   group: root
+   mode: 644
+
+- name: "change graphite data db permissions"
+  file:
+   path: /var/lib/graphite-web/graphite.db
+   owner: "apache"
+   group: "apache"
+   mode: 644
+
+- name: "touch index file"
+  file:
+   path: /var/lib/graphite-web/index
+   state: touch
+
+- name: "start apache"
+  systemd:
+   name: httpd
+   state: started
+   enabled: yes 

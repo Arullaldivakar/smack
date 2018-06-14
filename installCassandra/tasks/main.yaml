@@ -1,0 +1,473 @@
+---
+- name: "create {{group}} group"
+  group:
+   name: "{{group}}"
+   state: present
+
+- name: "Create {{user}} user"
+  user:
+   name: "{{user}}"
+   shell: /bin/bash
+   password: cassandra123
+   groups: "{{group}},wheel"
+   state: present
+
+- name: "create directories on nfs"
+  file:
+   path: "{{item}}"
+   state: directory
+   force: yes
+   mode: 0777
+   owner: cassandra
+   group: cassandra
+  with_items:
+  - "/shared/cassandra_cluster/{{ansible_hostname}}/cassandra"
+  - /var/run/cassandra
+  tags:
+  - log_dir
+
+- name: "Create LOG Links"
+  file:
+   src: /shared/cassandra_cluster/{{ansible_hostname}}/cassandra
+   dest: /var/log/cassandra
+   state: link
+   mode: 0777
+   owner: cassandra
+   group: cassandra
+  tags:
+  - log_dir
+ 
+
+- name: "add the multiline block"
+  blockinfile:
+   path: /etc/rc.local
+   block: |
+     ##Disable Hugepage for Hadoop Workload
+     if test -f /sys/kernel/mm/transparent_hugepage/enabled; then
+        echo never > /sys/kernel/mm/transparent_hugepage/enabled
+     fi
+     if test -f /sys/kernel/mm/transparent_hugepage/defrag; then
+        echo never > /sys/kernel/mm/transparent_hugepage/defrag
+     fi
+  tags: system_settings
+
+- name: "Diable CPU Frequency Scaling"
+  shell: |
+   for CPUFREQ in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+   do
+   [ -f $CPUFREQ ] || continue
+   echo -n performance > $CPUFREQ
+   done
+   exit 0
+  args:
+  #executable: /bin/bash
+  tags: system_settings
+
+- name: "Add user limits "
+  blockinfile:
+    path: /etc/security/limits.conf
+    create: yes
+    block: |
+       ###Added for DataStax
+       cassandra  soft memlock unlimited
+       cassandra  hard memlock unlimited
+       * soft nofile 32768
+       * hard nofile 32768
+       root soft nofile 32768
+       root hard nofile 32768
+       * soft memlock unlimited
+       * hard memlock unlimited
+       root soft memlock unlimited
+       root hard memlock unlimited
+       * soft as unlimited
+       * hard as unlimited
+       root soft as unlimited
+       root hard as unlimited
+  tags:
+    - user_limits
+    - system_settings
+
+- name: "Add user limits"
+  blockinfile:
+    path: /etc/security/limits.d/cassandra.conf
+    create: yes
+    block: |
+      cassandra - memlock unlimited
+      cassandra - nofile 100000
+      cassandra - nproc 32768
+      cassandra - as unlimited
+  tags:
+    - user_limits
+    - system_settings
+
+- name: "add process limit"
+  blockinfile:
+    path: /etc/security/limits.d/90-nproc.conf
+    block: |
+      *          soft    nproc     32768
+      root       soft    nproc     unlimited
+      cassandra  soft    nproc     32768
+  when:
+    - ansible_distribution_major_version == "6"
+  tags:
+    - user_limits
+    - system_settings
+
+- name: "add process limit"
+  blockinfile:
+    path: /etc/security/limits.d/20-nproc.conf
+    block: |
+      *          soft    nproc     32768
+      root       soft    nproc     unlimited
+      cassandra  soft    nproc     32768
+  when:
+    - ansible_distribution_major_version == "7"
+  tags:
+    - user_limits
+    - system_settings
+
+- name: "Add kernel parameters"
+  lineinfile:
+    path: /etc/sysctl.conf
+    regexp: '^{{item.name}}'
+    line: '{{item.name}} = {{item.value}}'
+    backrefs: yes
+  with_items:
+    - { name: net.ipv4.tcp_keepalive_time, value: 60 }
+    - { name: net.ipv4.tcp_keepalive_probes, value: 3 }
+    - { name: net.ipv4.tcp_keepalive_intvl, value: 10 }
+    - { name: net.core.rmem_max, value: 16777216 }
+    - { name: net.core.wmem_max , value: 16777216 }
+    - { name: net.core.rmem_default, value: 16777216 }
+    - { name: net.core.wmem_default, value: 16777216 }
+    - { name: net.core.optmem_max, value: 40960 }
+    - { name: net.ipv4.tcp_rmem, value: 4096 87380 16777216}
+    - { name: net.ipv4.tcp_wmem, value: 4096 87380 16777216}
+    - { name: vm.max_map_count, value: 1048575}
+    - { name: vm.dirty_background_bytes, value: 10485760 }
+    - { name: vm.dirty_background_ratio, value: 0 }
+    - { name: vm.dirty_bytes, value: 1073741824 }
+    - { name: fs.file-max, value: 1073741824 }
+  tags:
+    - system_settings
+    - system_net_config
+    - kernel_settings
+
+- name: "Insert if missing kernel parameters"
+  lineinfile:
+    path: /etc/sysctl.conf
+#    regexp: '^{{item.name}}'
+    line: '{{item.name}} = {{item.value}}'
+#    backrefs: yes
+  with_items:
+    - { name: net.ipv4.tcp_keepalive_time, value: 60 }
+    - { name: net.ipv4.tcp_keepalive_probes, value: 3 }
+    - { name: net.ipv4.tcp_keepalive_intvl, value: 10 }
+    - { name: net.core.rmem_max, value: 16777216 }
+    - { name: net.core.wmem_max , value: 16777216 }
+    - { name: net.core.rmem_default, value: 16777216 }
+    - { name: net.core.wmem_default, value: 16777216 }
+    - { name: net.core.optmem_max, value: 40960 }
+    - { name: net.ipv4.tcp_rmem, value: 4096 87380 16777216}
+    - { name: net.ipv4.tcp_wmem, value: 4096 87380 16777216}
+    - { name: vm.max_map_count, value: 1048575}
+    - { name: vm.dirty_background_bytes, value: 10485760 }
+    - { name: vm.dirty_background_ratio, value: 0 }
+    - { name: vm.dirty_bytes, value: 1073741824 }
+    - { name: fs.file-max, value: 1073741824 }
+  tags:
+    - system_settings
+    - system_net_config
+    - kernel_settings
+
+- name: "Disable zone reclaim mode"
+  shell: |
+     echo 0 > /proc/sys/vm/zone_reclaim_mode
+     exit 0
+  args:
+  #executable: /bin/bash
+  tags:
+    - system_settings
+
+
+- name: "Insert if missing kernel parameters"
+  lineinfile:
+    path: /etc/sysctl.conf
+    regexp: '^{{item}}'
+#    line: '{{item}}'
+    state: absent
+#    backrefs: yes
+  with_items:
+    - net.bridge.bridge-nf-call-ip6tables
+    - net.bridge.bridge-nf-call-iptables
+    - net.bridge.bridge-nf-call-arptables
+    - net.ipv4.conf.eno1.rp_filter
+    - net.ipv4.conf.eno2.rp_filter
+  tags:
+    - test
+    - kernel_settings
+    - system_settings
+
+- name: "Load the kernel configuration parameters"
+  command: "sudo sysctl -p"
+  ignore_errors: yes
+  register: result
+  tags:
+    - user_limits
+    - system_settings
+    - kernel_settings
+
+- debug: "var=result"
+
+- name: "disable the Hugepage"
+  script: /etc/rc.local
+
+- name: Check that the somefile.conf exists
+  stat:
+    path: /tmp/{{ jdkversion }}-linux-x64.rpm
+  register: stat_result
+  tags:
+    - installjdk
+
+- name: "download jdk"
+  get_url:
+    url: "{{ jdkurl }}"
+    dest: /tmp/
+    mode: 0777
+  when: stat_result.stat.exists == False
+  tags:
+    - installjdk
+
+
+
+- name: Check if java libaray  exists
+  stat:
+    path: /tmp/{{ jdkversion }}-linux-x64.rpm
+  register: stat1_result
+  tags:
+    - installjdk
+
+
+- name: "install jdk"
+  yum:
+   name: /tmp/{{ jdkversion }}-linux-x64.rpm
+   state: present
+  ignore_errors: yes
+  when: stat1_result.stat.exists == True
+#  notify:
+#    - "Remove Java alternatives"
+#    - "configure alternatives"
+  tags:
+    - installjdk
+
+- name: "create data directory"
+  file:
+    path: "{{item}}"
+    state: directory
+    force: yes
+    owner: "{{ user }}"
+    group: "{{ group }}"
+    recurse: yes
+  with_items:
+    - "{{data_dir}}"
+    - "{{commit_dir}}"
+  tags:
+    - create_dir
+    - create_data_dir
+
+
+
+
+
+- name: "Create data directory"
+  file:
+    path: "{{item[1]}}/{{item[0]}}"
+    state: directory
+    force: yes
+    owner: "{{ user }}"
+    group: "{{ group }}"
+    recurse: yes
+  with_nested:
+    - [data, solr_backup]
+    - "{{data_dir}}"
+  tags: 
+    - create_dir
+    - create_data_dir
+
+- name: "Create data directory"
+  file:
+    path: "{{commit_dir}}/{{item}}"
+    state: directory
+    force: yes
+    owner: "{{ user }}"
+    group: "{{ group }}"
+    recurse: yes
+
+  with_items:
+    - [saved_caches, commitlog, hints, cdc_raw]
+  tags:
+    - create_dir
+    - create_data_dir
+
+
+- name: "download from the remote url"
+  get_url:
+      url: "{{dse_url}}"
+      dest: "{{dse_base}}"
+      force: no
+  tags:
+      - download
+      - setup
+- name: "Extract from the URL"
+  unarchive:
+      src: "{{dse_base}}/{{dse_version}}-bin.tar.gz"
+      dest: "{{dse_base}}"
+      mode: "{{mode}}"
+      copy: no
+  tags:
+      - extract
+      - setup
+- name: "Create symbolic links and change Permission"
+  file:
+      src: "{{item.src}}"
+      dest: "{{item.dest}}"
+      state: link
+      mode: 0777
+  register: output
+  with_items:
+        - { src: '{{dse_base}}/{{dse_version}}', dest: "/opt/cassandra"}
+        - { src: '/opt/cassandra/bin/cqlsh', dest: "/usr/bin/cqlsh" }
+        - { src: '/opt/cassandra/bin/nodetool', dest: "/usr/bin/nodetool" }
+
+#        - { src: '/opt/dse/resources', dest: "/opt/dse/home"}
+  tags:
+        - link
+- name: "copy cassandra.yaml"
+  template:
+      src: templates/cassandra-yaml.j2
+      dest: "/opt/cassandra/conf/cassandra.yaml"
+      mode: "{{mode}}"
+  tags:
+      - copy_conf
+      - copy_cassandra_yaml
+  with_items: "{{data_dir}}"
+#  when: ansible_hostname == item.host
+
+- name: "copy cassandra-env.sh"
+  template:
+     src: templates/cassandra-env.j2
+     dest: "/opt/cassandra/conf/cassandra-env.sh"
+     mode: "{{mode}}"
+     owner: "{{user}}"
+     group: "{{group}}"
+  tags:
+     - copy_conf
+     - copy_cassandra_env
+
+- name: "copy cassandra-rack-dc"
+  template:
+     src: templates/cassandra-rack-dc.j2
+     dest: "/opt/cassandra/conf/cassandra-rackdc.properties"
+     mode: "{{mode}}"
+     owner: "{{user}}"
+     group: "{{group}}"
+  tags:
+     - copy_conf
+     - copy_cassandra_rack_dc
+
+- name: "copy init script"
+  template:
+     src: templates/cassandra.j2
+     dest: /etc/init.d/cassandra
+     mode: 755
+     owner: root
+     group: root
+  tags:
+   - copy_conf
+   - copy_init
+
+- name: "change permission"
+  file:
+    path: "{{dse_base}}"
+    group: "{{group}}"
+    owner: "{{user}}"
+    recurse: yes
+    state: directory
+  tags:
+    - permission
+- name: "change permission"
+  file:
+    path: "{{data_dir}}"
+    group: "{{group}}"
+    owner: "{{user}}"
+    recurse: yes
+    state: directory
+  tags:
+    - permission
+    - create_dir
+
+- name: "change permission"
+  file:
+    path: "{{commit_dir}}"
+    group: "{{group}}"
+    owner: "{{user}}"
+    recurse: yes
+    state: directory
+  tags:
+    - permission
+    - create_dir
+
+
+
+- name: "configure graphite metrics"
+  get_url:
+   url: "http://repo1.maven.org/maven2/io/dropwizard/metrics/metrics-graphite/3.1.0/metrics-graphite-3.1.0.jar"
+   dest: "/opt/cassandra/lib/"
+   force: yes
+  tags:
+  - graphite_metrics
+
+- name: "copy graphite.yaml"
+  template:
+   src: graphiteCassandra.j2
+   dest: "/opt/cassandra/conf/metrics-graphite.yaml"
+   mode: "0777"
+   owner: cassandra
+   group: cassandra
+  tags:
+  - graphite_metrics
+
+- name: "change cassandra env.sh"
+  blockinfile:
+   path: "/opt/cassandra/conf/cassandra-env.sh"
+   block: |
+    JVM_OPTS="$JVM_OPTS -Dcassandra.metricsReporterConfigFile=metrics-graphite.yaml"
+  tags:
+  - graphite_metrics
+
+
+- name: "stop cassandra"
+  service:
+   name: cassandra
+   state: stopped
+  tags:
+  - stop
+#  - graphite_metrics
+
+- name: "start cassandra"
+  service:
+   name: cassandra
+   state: started
+  tags:
+  - start
+#  - graphite_metrics
+
+- name: "Restart Cassandra"
+  shell: |
+   sudo service cassandra stop
+   sudo service cassandra start
+   exit 0
+  args:
+   executable: /bin/bash
+  tags:
+  - restart

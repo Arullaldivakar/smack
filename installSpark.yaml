@@ -1,0 +1,5 @@
+---
+- hosts: spark
+  become: yes
+  roles:
+    - spark

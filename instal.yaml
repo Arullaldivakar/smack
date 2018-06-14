@@ -1,0 +1,6 @@
+---
+- hosts: masters
+  become: yes
+  roles:
+    - ansible-role-zookeeper
+    - mesos

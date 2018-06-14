@@ -1,0 +1,168 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          dse
+# Required-Start:    $remote_fs
+# Required-Stop:     $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: distributed storage system for structured data
+# Description:       Cassandra is a distributed (peer-to-peer) system for
+#                    the management and storage of structured data.
+### END INIT INFO
+
+
+DESC="DSE daemon"
+NAME=dse
+PIDFILE=/var/run/$NAME.pid
+SCRIPTNAME=/etc/init.d/$NAME
+CONFDIR=/opt/dse/resources/cassandra/conf
+WAIT_FOR_START=10
+HADOOP_ENABLED=0
+SOLR_ENABLED=1
+JSVC_INIT=1
+dse_CMD="/opt/dse/bin/dse cassandra -p $PIDFILE"
+OUTPUT_FILE="/var/log/cassandra/output.log"
+
+# The first existing directory is used for JAVA_HOME if needed.
+JVM_SEARCH_DIRS="/usr/lib/jvm/java-6-sun"
+echo "check files"
+#[ -e /usr/share/dse/dse.jar ] || exit 0
+#[ -e /etc/dse/dse-env.sh ] || exit 0
+[ -e /opt/dse/bin/dse-env.sh ] || exit 0
+echo "pass"
+# Read configuration variable file if it is present
+[ -r /etc/default/$NAME ] && . /etc/default/$NAME
+
+# redhat init functions
+[ -r /etc/init.d/functions ] || { echo 'Initscript functions not found!' >&2; exit 1; }
+. /etc/init.d/functions
+
+# If JAVA_HOME has not been set, try to determine it.
+if [ -z "$JAVA_HOME" ]; then
+    # If java is in PATH, use a JAVA_HOME that corresponds to that. This is
+    # both consistent with how the upstream startup script works, and how
+    # Debian works (read: the use of alternatives to set a system JVM).
+    if [ -n `which java` ]; then
+        java=`which java`
+        # Dereference symlink(s)
+        while true; do
+            if [ -h "$java" ]; then
+                java=`readlink "$java"`
+                continue
+            fi
+            break
+        done
+        JAVA_HOME="`dirname $java`/../"
+    # No JAVA_HOME set and no java found in PATH, search for a JVM.
+    else
+        for jdir in $JVM_SEARCH_DIRS; do
+            if [ -x "$jdir/bin/java" ]; then
+                JAVA_HOME="$jdir"
+                break
+            fi
+        done
+    fi
+fi
+
+#
+# Function that returns 0 if process is running, or nonzero if not.
+#
+# The nonzero value is 3 if the process is simply not running, and 1 if the
+# process is not running but the pidfile exists (to match the exit codes for
+# the "status" command; see LSB core spec 3.1, section 20.2)
+#
+is_running()
+{
+    status -p $PIDFILE "$NAME" > /dev/null 2>&1
+}
+
+#
+# Function that starts the daemon/service
+#
+do_start()
+{
+    # Return
+    #   0 if daemon has been started
+    #   1 if daemon was already running
+    #   2 if daemon could not be started
+    is_running && return 1
+
+#    if [ "$HADOOP_ENABLED" = "0" ] && [ "$SOLR_ENABLED" = "0" ]; then
+#        echo "$DESC starting with Hadoop and Solr disabled (edit /etc/default/dse to enable)"
+#    elif [ "$HADOOP_ENABLED" = "1" ] && [ "$SOLR_ENABLED" = "1" ]; then
+#        echo "$DESC starting with Hadoop and Solr enabled (edit /etc/default/dse to disable)"
+#        dse_CMD="$dse_CMD -t -s -Djava.library.path=$JAVA_LIBRARY_PATH"
+#    elif [ "$HADOOP_ENABLED" = "1" ]; then
+#        echo "$DESC starting with Hadoop enabled (edit /etc/default/dse to disable)"
+#        dse_CMD="$dse_CMD -t -Djava.library.path=$JAVA_LIBRARY_PATH"
+#    elif [ "$SOLR_ENABLED" = "1" ]; then
+        echo "$DESC starting with Solr enabled (edit /etc/default/dse to disable)"
+        dse_CMD="$dse_CMD -s -Djava.library.path=$JAVA_LIBRARY_PATH"
+        #dse_CMD="$dse_CMD -Djava.library.path=$JAVA_LIBRARY_PATH"
+#    fi
+
+    if [ -e $PIDFILE ]; then
+        rm $PIDFILE
+    fi
+
+    touch $PIDFILE
+    chown cassandra $PIDFILE
+
+    touch "$OUTPUT_FILE"
+    chown cassandra "$OUTPUT_FILE"
+
+    #su cassandra -c "$dse_CMD > \"$OUTPUT_FILE\" 2>&1"
+    su cassandra -c "$dse_CMD > $OUTPUT_FILE"
+
+    is_running && return 0
+    for tries in `seq $WAIT_FOR_START`; do
+        sleep 1
+        is_running && return 0
+    done
+    return 2
+}
+
+#
+# Function that stops the daemon/service
+#
+do_stop()
+{
+    # Return
+    #   0 if daemon has been stopped
+    #   1 if daemon was already stopped
+    #   2 if daemon could not be stopped
+    #   other if a failure occurred
+    echo -n "Stopping $NAME"
+    killproc -p $PIDFILE $NAME
+    RETVAL="$?"
+    echo
+    [ "$RETVAL" = 2 ] && return 2
+    rm -f "$PIDFILE"
+    return "$RETVAL"
+}
+
+case "$1" in
+ start)
+    echo "Starting $DESC" "$NAME"
+    do_start
+    ;;
+  stop)
+    echo "Stopping $DESC" "$NAME"
+    do_stop
+    ;;
+  restart|force-reload)
+    echo "Restarting $DESC" "$NAME"
+    do_stop
+    [ $? -eq 0 ] && do_start
+    ;;
+  status)
+    status -p $PIDFILE $NAME
+    ;;
+  *)
+    echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload|status}" >&2
+    exit 3
+    ;;
+esac
+
+:
+

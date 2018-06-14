@@ -1,0 +1,5 @@
+---
+- hosts: openlab
+  become: yes
+  roles:
+    - mesos

@@ -1,0 +1,7 @@
+---
+- hosts: openlab
+  become: yes
+  roles:
+#    - graphite
+#    - grafana
+    - diamond

@@ -1,0 +1,5 @@
+---
+- hosts: zookeeper
+  become: yes
+  roles:
+    - ansible-role-zookeeper

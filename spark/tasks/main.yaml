@@ -1,0 +1,35 @@
+---
+- name: "Download spark binaries"
+  get_url:
+    url: http://durahc1mn01-stg.corp.netapp.com/extra-packages/spark-2.2.1-bin-hadoop2.7.tgz
+    dest: "{{ spark_nfs_location }}"
+    mode: 777
+
+- name: "untar the spark binaries"
+  unarchive:
+   src: http://durahc1mn01-stg.corp.netapp.com/extra-packages/spark-2.2.1-bin-hadoop2.7.tgz
+   dest: "{{spark_binary_location}}"
+   mode: 755
+   remote_src: yes
+
+#- name: "copy spark end"
+#  copy:
+#   src: "{{ spark_binary_location }}/spark-2.2.1-bin-hadoop2.7/conf/spark-env.sh.template"
+#   dest: "{{ spark_binary_location }}/spark-2.2.1-bin-hadoop2.7/conf/spark-env.sh"
+
+
+- name: "copy"
+  shell: |
+   cp "{{ spark_binary_location }}/spark-2.2.1-bin-hadoop2.7/conf/spark-env.sh.template" "{{ spark_binary_location }}/spark-2.2.1-bin-hadoop2.7/conf/spark-env.sh"
+  executable:
+   args: /bin/bash
+
+- name: update spark env.sh
+  blockinfile:
+    path: "{{ spark_binary_location }}/spark-2.2.1-bin-hadoop2.7/conf/spark-env.sh"
+    block: |
+      export MESOS_NATIVE_JAVA_LIBRARY=/usr/lib/libmesos.so
+      export SPARK_EXECUTOR_URI="{{ spark_nfs_location }}/spark-2.2.1-bin-hadoop2.7.tgz"
+
+- name: start mesos dispatcher
+  command: "{{ spark_binary_location }}/spark-2.2.1-bin-hadoop2.7/sbin/start-mesos-dispatcher.sh --master mesos://{{ quorum }}"

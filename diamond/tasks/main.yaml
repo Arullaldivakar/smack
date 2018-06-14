@@ -1,0 +1,51 @@
+---
+
+- name: "install initscripts fontconfig"
+  yum:
+   name: "{{item}}"
+   state: present
+  with_items:
+  - make 
+  - rpm-build 
+  - python-configobj 
+  - python-setuptools
+
+
+- name: "git clone diamond"
+  git:
+   repo: "https://github.com/python-diamond/Diamond"
+   dest: /opt/Diamond
+   clone: yes
+
+- name: "make rpm"
+  shell: |
+   cd /opt/Diamond
+   make buildrpm
+   exit 0
+  executables:
+   args: /bin/bash
+
+- name: "install rpm"
+  yum:
+   name: /opt/Diamond/dist/diamond-4.0.809-0.noarch.rpm
+   state: present
+
+- name: "copy example conf"
+  copy:
+   src: /etc/diamond/diamond.conf.example
+   dest: /etc/diamond/diamond.conf
+   mode: 0775
+   remote_src: yes
+
+- name: "copy conf"
+  template:
+   src: diamond.j2
+   dest: /etc/diamond/diamond.conf
+   mode: 755
+
+- name: "start diamond agent"
+  service:
+   name: diamond
+   state: restarted
+  tags:
+  - restart

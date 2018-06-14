@@ -1,0 +1,19 @@
+---
+dse_base: "/opt/"
+cluster_name: "Analytics-Cassandra_cluster"
+seeds: "10.122.217.63,10.122.217.60"
+user: "cassandra"
+group: "cassandra"
+mode: "0775"
+dse_version: "apache-cassandra-3.6"
+#dse_url: "http://archive.apache.org/dist/cassandra/3.6/{{dse_version}}-bin.tar.gz"
+dse_url: "http://10.102.96.141/datastax-packages/apache-cassandra-3.6-bin.tar.gz"
+data_dir: 
+    - "/apps/cassandra/data"
+commit_dir: "/apps/cassandra/data"
+dc: DataCenter-1
+rack: rack-1
+jdkversion: jdk-8u144
+jdkpath: /usr/java/jdk1.8.0_144/bin/java
+jdkurl: http://10.102.96.141/extra-packages/java/jdk-8u144-linux-x64.rpm
+graphite_host: "10.193.112.202"
